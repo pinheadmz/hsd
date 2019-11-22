@@ -31,7 +31,8 @@ const node = new Node({
   memory: false,
   workers: true,
   listen: true,
-  loader: require
+  loader: require,
+  network: 'regtest'
 });
 
 process.on('unhandledRejection', (err, promise) => {

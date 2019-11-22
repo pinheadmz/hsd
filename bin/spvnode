@@ -49,7 +49,7 @@ const node = new SPVNode({
   memory: false,
   workers: true,
   listen: false,
-  network: 'main',
+  network: 'regtest',
   loader: require
 });
 
