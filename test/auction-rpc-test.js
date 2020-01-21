@@ -134,7 +134,12 @@ class TestUtil {
   }
 
   async confirmBlock(hash, timeout = 5000) {
-    return common.forValue(this.blocks, hash, hash, timeout);
+    await common.forValue(this.blocks, hash, hash, timeout);
+    return common.forValue(
+      this.node.plugins.walletdb.wdb,
+      'height',
+      this.node.chain.tip.height,
+      timeout);
   }
 }
 
