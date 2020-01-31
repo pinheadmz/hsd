@@ -297,8 +297,7 @@ function main(argv) {
     str = null;
   } else {
     if (pkg.version !== '2.0.0') {
-      console.error('Not enabled yet.');
-      return 1;
+      console.error('Welcome to Experimental Simnet!');
     }
 
     if (argv.length !== 3 || argv[2].length !== 160) {
