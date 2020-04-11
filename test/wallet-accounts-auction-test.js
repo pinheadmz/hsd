@@ -395,8 +395,34 @@ describe('Multiple accounts participating in same auction', function() {
       await wallet.abandon(tx.hash());
 
       assert.strictEqual(node.mempool.map.size, 1);
-      await node.mempool.reset();
-      assert.strictEqual(node.mempool.map.size, 0);
+      await mineBlocks(1);
+      const ns = await node.chain.db.getNameStateByName(name);
+      assert(ns.isRevoked(node.chain.height, network));
+      assert.strictEqual(node.chain.height, ns.revoked);
+    });
+  });
+
+  describe('RE-OPEN', function() {
+    this.timeout(10000);
+    it('should re-open a name after being revoked', async () => {
+      let ns = await node.chain.db.getNameStateByName(name);
+      const heightOfExpiration = network.names.auctionMaturity + ns.revoked;
+      const start = node.chain.height;
+
+      for (let i = start; i < heightOfExpiration - 1; i++) {
+        await assert.rejects(async () => {
+          await wallet.sendOpen(name, false, {account: 0});
+        }, {
+          name: 'Error',
+          message: 'Name is not available.'
+        });
+        await mineBlocks(1);
+      }
+
+      await wallet.sendOpen(name, false, {account: 0});
+      await mineBlocks(1);
+      ns = await node.chain.db.getNameStateByName(name);
+      assert(ns.isOpening(node.chain.height, network));
     });
   });
 });
