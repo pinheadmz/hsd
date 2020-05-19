@@ -279,7 +279,7 @@ All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
 
 - `getbids [name] [own]` - List own bids on a name.
 - `getreveals [name] [own]` - List own reveals on a name.
-- `getnames` - List all watched names and their statuses.
+- `getnames [own]` - List own names and their statuses.
 - `getnameinfo [name]` - Returns name info, similar to the node call above.
 - `getauctioninfo [name]` - Returns auction info, along with all bids and
   reveals.
