@@ -4,7 +4,7 @@
 'use strict';
 
 const assert = require('bsert');
-const Address = require('../lib/primitives/address');
+const Address = require('../lib/primitives/address')
 
 describe('Address', function() {
   it('should match mainnet p2pkh address', () => {
