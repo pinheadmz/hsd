@@ -43,7 +43,7 @@ const node = new FullNode({
 });
 
 const nclient = new NodeClient({
-  port: network.rpcPort,
+  port: 1000,
   apiKey: 'foo'
 });
 

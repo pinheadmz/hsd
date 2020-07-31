@@ -797,7 +797,7 @@ describe('Chain', function() {
 
       assert(err);
       assert.equal(err.type, 'VerifyError');
-      assert.equal(err.reason, 'bad-fork-prior-to-checkpoint');
+      assert.equal(err.reason, 'bad-fork-prior-to-foofoofoofoo');
       assert.equal(err.score, 100);
     });
 

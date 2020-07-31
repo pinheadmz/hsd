@@ -168,7 +168,7 @@ describe('Wallet Auction', function() {
     job.refresh();
 
     const block = await job.mineAsync();
-    assert(await chain.add(block));
+    assert(!await chain.add(block));
 
     let ns = await chain.db.getNameStateByName(NAME1);
     let state = ns.state(chain.height, network);
