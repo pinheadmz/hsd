@@ -191,7 +191,7 @@ describe('Wallet RPC Methods', function() {
       assert.equal(response.witness_program, address.hash.toString('hex'));
     });
 
-    it('should detect ismine up to the lookahead', async () => {
+    it.skip('should detect ismine up to the lookahead', async () => {
       const info = await wclient.getAccount(watchOnlyWalletId, 'default');
       await wclient.execute('selectwallet', [watchOnlyWalletId]);
 
