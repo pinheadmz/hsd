@@ -12,17 +12,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
     - uses: actions/checkout@v2
-    - name: nodejs
+    - name: setup
       uses: actions/setup-node@v1
 
-    - run: sudo apt-get install -y libunbound-dev
-    - run: npm install nyc bslint coveralls
-    - run: node_modules/bslint/bin/eslint .
-    - run: npm run build --if-present
-    - run: node_modules/.bin/nyc --reporter lcov node_modules/.bin/bmocha -- --reporter spec test/*.js
+    - name: install
+      run: sudo apt-get install -y libunbound-dev |
+           npm install nyc coveralls
 
-    - name: coveralls
+    - name: lint
+      run: npm run lint
+
+    - name: test
+      run: node_modules/.bin/nyc --reporter lcov node_modules/.bin/bmocha -- --reporter spec test/*.js
+
+    - name: coverage
       uses: coverallsapp/github-action@v1.1.1
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
