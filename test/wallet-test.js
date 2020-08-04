@@ -1561,6 +1561,7 @@ describe('Wallet', function() {
   });
 
   it('should not exceed MEMPOOL_MAX_ANCESTORS policy', async () => {
+    this.timeout(10000);
     // Create wallet and get one address
     const wallet = await wdb.create();
     const addr1 = await wallet.receiveAddress();
