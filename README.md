@@ -460,5 +460,5 @@ See LICENSE for more info.
 [airdrop]: https://github.com/handshake-org/hs-airdrop
 [coverage-status-img]: https://coveralls.io/repos/github/handshake-org/hsd/badge.svg?branch=master
 [coverage-status-url]: https://coveralls.io/github/handshake-org/hsd?branch=master
-[ci-status-img]: https://github.com/handshake-org/hsd/workflows/ci/badge.svg
+[ci-status-img]: https://github.com/handshake-org/hsd/workflows/Build/badge.svg
 [ci-status-url]: https://github.com/handshake-org/hsd/tree/master

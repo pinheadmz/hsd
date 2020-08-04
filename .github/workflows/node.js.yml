@@ -1,4 +1,4 @@
-name: ci
+name: Build
 
 on:
   push:
@@ -11,23 +11,27 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x, 14.x]
+
     steps:
 
     - uses: actions/checkout@v2
-    - name: setup
+    - name: Setup
       uses: actions/setup-node@v1
 
-    - name: install
+    - name: Install
       run: sudo apt-get install -y libunbound-dev |
            npm install nyc coveralls
 
-    - name: lint
+    - name: Lint
       run: npm run lint
 
-    - name: test
+    - name: Test
       run: node_modules/.bin/nyc --reporter lcov node_modules/.bin/bmocha -- --reporter spec test/*.js
 
-    - name: coverage
+    - name: Coverage
       uses: coverallsapp/github-action@v1.1.1
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
