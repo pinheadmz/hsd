@@ -74,6 +74,42 @@ describe('Wallet Rescan (plugin)', function() {
     const finalBalance = await wallet.getBalance(0);
     assert.strictEqual(finalBalance.confirmed, 101 * 2000 * 1e6);
   });
+
+  it('should abort rescan', async () => {
+    assert.strictEqual(wdb.height, 101);
+    assert.strictEqual(wdb.height, node.chain.height);
+
+    // Possible race condition here.
+    // There is no guarantee that the rescan will stop at exactly height 50
+    const handler = (wallet, data, details) => {
+      if (details.height === 50) {
+        wdb.abortRescan();
+      }
+    };
+    wdb.on('confirmed', handler);
+
+    await wdb.rescan(0);
+
+    assert.strictEqual(wdb.height, 50);
+
+    wdb.removeListener('confirmed', handler);
+  });
+
+  it('should not "rollback to the future"', async () => {
+    assert.strictEqual(wdb.height, 50);
+
+    await assert.rejects(
+      wdb.rescan(75),
+      {message: 'WDB: Cannot rollback to the future.'}
+    );
+  });
+
+  it('should finish rescan', async () => {
+    assert.strictEqual(wdb.height, 50);
+    await wdb.rescan(40);
+    assert.strictEqual(wdb.height, 101);
+    assert.strictEqual(wdb.height, node.chain.height);
+  });
 });
 
 describe('Wallet Rescan (node)', function() {
@@ -147,5 +183,40 @@ describe('Wallet Rescan (node)', function() {
 
     const finalBalance = await wallet.getBalance(0);
     assert.strictEqual(finalBalance.confirmed, 101 * 2000 * 1e6);
+  });
+
+  it('should abort rescan', async () => {
+    assert.strictEqual(wdb.height, 101);
+    assert.strictEqual(wdb.height, node.chain.height);
+
+    // Possible race condition here.
+    // There is no guarantee that the rescan will stop at exactly height 50
+    const handler = (wallet, data, details) => {
+      if (details.height === 50)
+        wdb.abortRescan();
+    };
+    wdb.on('confirmed', handler);
+
+    await wdb.rescan(0);
+
+    assert.strictEqual(wdb.height, 50);
+
+    wdb.removeListener('confirmed', handler);
+  });
+
+  it('should not "rollback to the future"', async () => {
+    assert.strictEqual(wdb.height, 50);
+
+    await assert.rejects(
+      wdb.rescan(75),
+      {message: 'WDB: Cannot rollback to the future.'}
+    );
+  });
+
+  it('should finish rescan', async () => {
+    assert.strictEqual(wdb.height, 50);
+    await wdb.rescan(40);
+    assert.strictEqual(wdb.height, 101);
+    assert.strictEqual(wdb.height, node.chain.height);
   });
 });
