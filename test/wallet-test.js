@@ -2870,4 +2870,68 @@ describe('Wallet', function() {
       assert.equal(claim.covenant.isClaim(), true);
     });
   });
+
+  describe('WalletDB Events', function() {
+    let wallet;
+    let lookahead;
+    const network = Network.get('regtest');
+    const workers = new WorkerPool({enabled: false});
+    const wdb = new WalletDB({network, workers});
+
+    const mnemonic =
+      'abandon abandon abandon abandon ' +
+      'abandon abandon abandon abandon ' +
+      'abandon abandon abandon about';
+
+    // Derived in advance from above mnemonic, account 0
+    const address0 = 'rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8';
+    const address10 = 'rs1qlvysusse4qgym5s7mv8ddaatgvgfq6g6vcjhvf';
+
+    before(async () => {
+      await wdb.open();
+      wallet = await wdb.create({mnemonic});
+      const account0 = await wallet.getAccount(0);
+      lookahead = account0.lookahead;
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should derive and emit one new address', async () => {
+      // address0 is the current (initial) receive address, meaning that
+      // the wallet has pre-derived and saved keys 0 through `lookahead`.
+      // Receiving a TX to this address will generate one new key,
+      // at index `lookahead + 1`.
+      wallet.once('address', (derived) => {
+        assert.strictEqual(derived.length, 1);
+        assert.strictEqual(derived[0].index, lookahead + 1);
+      });
+
+      const mtx = new MTX();
+      mtx.addInput(dummyInput());
+      mtx.addOutput(address0, 10000);
+
+      await wdb.addTX(mtx.toTX());
+    });
+
+    it('should derive and emit ten new addresses', async () => {
+      // Now address index 1 is the current receive address.
+      // Keys 0 through `lookahead + 1` are already derived from the last test.
+      // address10 is one of these keys, ahead of the current receiveDepth.
+      // When the wallet receives a TX to this address, it will need to
+      // derive and save keys from `lookahead + 1` to `lookahead + 10 + 1`.
+      // The extra `+ 1` is because address index 11 is the new receive address.
+      wallet.once('address', (derived) => {
+        assert.strictEqual(derived.length, 10);
+        assert.strictEqual(derived[9].index, lookahead + 11);
+      });
+
+      const mtx = new MTX();
+      mtx.addInput(dummyInput());
+      mtx.addOutput(address10, 10000);
+
+      await wdb.addTX(mtx.toTX());
+    });
+  });
 });
