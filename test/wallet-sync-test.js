@@ -28,6 +28,11 @@ describe('Node Sync', function() {
   const value = 100000;
   // Will be the balance of a synced wallet after generating transactions
   let expected;
+  // Create the same wallet in all three nodes
+  const mnemonic =
+    'abandon abandon abandon abandon ' +
+    'abandon abandon abandon abandon ' +
+    'abandon abandon abandon about';
 
   const ports = {
     p2p: 47000,
@@ -108,12 +113,6 @@ describe('Node Sync', function() {
       assert(await nodeWithPlugin.chain.add(block));
     }
 
-    // Create the same wallet in all three nodes
-    const mnemonic =
-      'abandon abandon abandon abandon ' +
-      'abandon abandon abandon abandon ' +
-      'abandon abandon abandon about';
-
     wdbPlugin = nodeWithPlugin.require('walletdb').wdb;
     wdbNode = walletNode.wdb;
     wdbSPV = spvNode.require('walletdb').wdb;
@@ -173,6 +172,23 @@ describe('Node Sync', function() {
     assert.strictEqual(expected, balance.confirmed);
   });
 
+  it('should rescan wallet as plugin in full node', async () => {
+    const rescanPlugin = await wdbPlugin.create({
+      id: 'rescanPlugin',
+      mnemonic
+    });
+
+    let balance = await rescanPlugin.getBalance();
+    assert.strictEqual(balance.tx, 0);
+    assert.strictEqual(balance.confirmed, 0);
+    await wdbPlugin.rescan(0);
+    await forValue(wdbPlugin, 'height', nodeWithPlugin.chain.height);
+
+    balance = await rescanPlugin.getBalance();
+    assert.strictEqual(balance.tx, blocks * txs);
+    assert.strictEqual(balance.confirmed, expected);
+  });
+
   it('should sync wallet as remote node', async () => {
     // Connect the full node with its remote wallet node to the miner node.
     await nodeWithoutWallet.connect();
@@ -181,7 +197,7 @@ describe('Node Sync', function() {
 
     const balance = await walletWalletNode.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
-    assert.strictEqual(expected, balance.confirmed);
+    assert.strictEqual(balance.confirmed, expected);
   });
 
   it('should sync wallet as plugin in SPV node', async () => {
@@ -192,6 +208,6 @@ describe('Node Sync', function() {
 
     const balance = await walletSPV.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
-    assert.strictEqual(expected, balance.confirmed);
+    assert.strictEqual(balance.confirmed, expected);
   });
 });
