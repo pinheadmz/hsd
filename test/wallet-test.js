@@ -2898,6 +2898,23 @@ describe('Wallet', function() {
       await wdb.close();
     });
 
+    it('should not derive or emit any new address', async () => {
+      const handler = (derived) => {
+        assert.strictEqual(derived.length, 1);
+        assert.strictEqual(derived[0].index, lookahead + 1);
+      };
+
+      wallet.on('address', handler);
+
+      // Send TX to a non-wallet address
+      const mtx = new MTX();
+      mtx.addInput(dummyInput());
+      mtx.addOutput('rs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqn6kda', 10000);
+
+      await wdb.addTX(mtx.toTX());
+      wallet.removeListener('address', handler);
+    });
+
     it('should derive and emit one new address', async () => {
       // address0 is the current (initial) receive address, meaning that
       // the wallet has pre-derived and saved keys 0 through `lookahead`.
