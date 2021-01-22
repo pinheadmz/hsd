@@ -7,6 +7,7 @@ const assert = require('bsert');
 const FullNode = require('../lib/node/fullnode');
 const WalletNode = require('../lib/wallet/node');
 const SPVNode = require('../lib/node/spvnode');
+const Account = require('../lib/wallet/account');
 const {forValue} = require('./util/common');
 
 describe('Node Sync', function() {
@@ -15,8 +16,12 @@ describe('Node Sync', function() {
   let wdbPlugin, wdbNode, wdbSPV;
   let walletPlugin, walletWalletNode, walletSPV;
 
-  // Will be pulled from wallet account default setting
-  let lookahead;
+  // Amazing hack to replace whatever lookahead value is
+  // actually being used in practice. This is set low to keep
+  // the test runtime shorter and make sync failures more probable
+  // until the bug is fixed and the test passes.
+  Account.MAX_LOOKAHEAD = 10;
+
   // How many more txs per block we will generate beyond the lookahead value
   const extra = 10;
   // Total number of txs per block (based on lookahead)
@@ -123,9 +128,8 @@ describe('Node Sync', function() {
 
     // Everyone has the same account, lookahead, and address chain
     const account = await walletPlugin.getAccount(0);
-    lookahead = account.lookahead;
     // How many transactions we will generate per block
-    txs = lookahead + extra;
+    txs = account.lookahead + extra;
     // This will be the final balance of the synced wallet
     // after generating blocks full of transactions minus fees.
     expected = blocks * txs * (value - hardFee);
