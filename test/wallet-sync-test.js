@@ -10,17 +10,13 @@ const SPVNode = require('../lib/node/spvnode');
 const Account = require('../lib/wallet/account');
 const {forValue} = require('./util/common');
 
-describe('Node Sync', function() {
+describe('Wallet Sync', function() {
   this.timeout(60000);
+
+  const currentLookahead = Account.MAX_LOOKAHEAD;
 
   let wdbPlugin, wdbNode, wdbSPV;
   let walletPlugin, walletWalletNode, walletSPV;
-
-  // Amazing hack to replace whatever lookahead value is
-  // actually being used in practice. This is set low to keep
-  // the test runtime shorter and make sync failures more probable
-  // until the bug is fixed and the test passes.
-  Account.MAX_LOOKAHEAD = 10;
 
   // How many more txs per block we will generate beyond the lookahead value
   const extra = 10;
@@ -106,6 +102,12 @@ describe('Node Sync', function() {
   spvNode.rs.close = noop;
 
   before(async () => {
+    // Amazing hack to replace whatever lookahead value is
+    // actually being used in practice. This is set low to keep
+    // the test runtime shorter and make sync failures more probable
+    // until the bug is fixed and the test passes.
+    Account.MAX_LOOKAHEAD = 10;
+
     await nodeWithPlugin.open();
     await nodeWithPlugin.connect();
     await nodeWithoutWallet.open();
@@ -165,6 +167,9 @@ describe('Node Sync', function() {
     await walletNode.close();
     await nodeWithoutWallet.close();
     await nodeWithPlugin.close();
+
+    // Restore
+    Account.MAX_LOOKAHEAD = currentLookahead;
   });
 
   it('should sync wallet as plugin in full node', async () => {
