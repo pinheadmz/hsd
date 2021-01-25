@@ -233,7 +233,7 @@ describe('Wallet Sync', function() {
     assert.strictEqual(balance.confirmed, expected);
   });
 
-  it('should sync wallet as remote node', async () => {
+  it.skip('should sync wallet as remote node', async () => {
     // Connect the full node with its remote wallet node to the miner node.
     await nodeWithoutWallet.connect();
     await nodeWithoutWallet.startSync();
@@ -244,7 +244,7 @@ describe('Wallet Sync', function() {
     assert.strictEqual(balance.confirmed, expected);
   });
 
-  it('should sync wallet as plugin in SPV node', async () => {
+  it.skip('should sync wallet as plugin in SPV node', async () => {
     // Connect the SPV node with its wallet plugin to the miner node.
     await spvNode.connect();
     await spvNode.startSync();
