@@ -29,26 +29,28 @@ describe('Wallet Sync', function() {
   const value = 100000;
   // Will be the balance of a synced wallet after generating transactions
   let expected;
-  // Create the same wallet in all three nodes
+  // Create the same wallet in all test nodes
   const mnemonic =
     'abandon abandon abandon abandon ' +
     'abandon abandon abandon abandon ' +
     'abandon abandon abandon about';
 
   const ports = {
+    brontide: 46000,
     p2p: 47000,
     node: 48000,
     wallet: 49000
   };
 
   // Miner
-  const nodeWithPlugin = new FullNode({
+  const miner = new FullNode({
     memory: true,
     network: 'regtest',
     bip37: true,
     plugins: [require('../lib/wallet/plugin')],
     listen: true,
     port: ports.p2p,
+    brontidePort: ports.brontide,
     httpPort: ports.node,
     env: {
       'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
@@ -56,11 +58,28 @@ describe('Wallet Sync', function() {
   });
 
   // Connects to miner
+  const nodeWithPlugin = new FullNode({
+    memory: true,
+    network: 'regtest',
+    plugins: [require('../lib/wallet/plugin')],
+    port: ports.p2p + 1,
+    brontidePort: ports.brontide + 1,
+    httpPort: ports.node + 1,
+    only: [`127.0.0.1:${ports.p2p}`],
+    env: {
+      'HSD_WALLET_HTTP_PORT': (ports.wallet + 1).toString()
+    },
+    logLevel: 'spam',
+    logConsole: true
+  });
+
+  // Connects to miner
   const nodeWithoutWallet = new FullNode({
     memory: true,
     network: 'regtest',
-    port: ports.p2p + 1,
-    httpPort: ports.node + 1,
+    port: ports.p2p + 2,
+    brontidePort: ports.brontide + 2,
+    httpPort: ports.node + 2,
     only: [`127.0.0.1:${ports.p2p}`]
   });
 
@@ -68,8 +87,8 @@ describe('Wallet Sync', function() {
   const walletNode = new WalletNode({
     memory: true,
     network: 'regtest',
-    httpPort: ports.wallet + 1,
-    nodePort: ports.node + 1
+    httpPort: ports.wallet + 2,
+    nodePort: ports.node + 2
   });
 
   // Connects to miner
@@ -77,17 +96,22 @@ describe('Wallet Sync', function() {
     memory: true,
     network: 'regtest',
     plugins: [require('../lib/wallet/plugin')],
-    port: ports.p2p + 2,
-    httpPort: ports.node + 2,
+    port: ports.p2p + 3,
+    brontidePort: ports.brontide + 3,
+    httpPort: ports.node + 3,
     only: [`127.0.0.1:${ports.p2p}`],
     env: {
-      'HSD_WALLET_HTTP_PORT': (ports.wallet + 2).toString()
+      'HSD_WALLET_HTTP_PORT': (ports.wallet + 3).toString()
     }
   });
 
   // Disable DNS servers in all nodes to avoid port collisions
   // TODO: See https://github.com/handshake-org/hsd/issues/528
   const noop = () => {};
+  miner.ns.open = noop;
+  miner.ns.close = noop;
+  miner.rs.open = noop;
+  miner.rs.close = noop;
   nodeWithPlugin.ns.open = noop;
   nodeWithPlugin.ns.close = noop;
   nodeWithPlugin.rs.open = noop;
@@ -108,25 +132,26 @@ describe('Wallet Sync', function() {
     // until the bug is fixed and the test passes.
     Account.MAX_LOOKAHEAD = 10;
 
+    await miner.open();
+    await miner.connect();
     await nodeWithPlugin.open();
-    await nodeWithPlugin.connect();
     await nodeWithoutWallet.open();
     await walletNode.open();
     await spvNode.open();
 
     // Fund miner
     for (let i = 0; i < 200; i++) {
-      const block = await nodeWithPlugin.miner.mineBlock();
-      assert(await nodeWithPlugin.chain.add(block));
+      const block = await miner.miner.mineBlock();
+      assert(await miner.chain.add(block));
     }
 
     wdbPlugin = nodeWithPlugin.require('walletdb').wdb;
     wdbNode = walletNode.wdb;
     wdbSPV = spvNode.require('walletdb').wdb;
 
-    walletPlugin = await wdbPlugin.create({mnemonic});
-    walletWalletNode = await wdbNode.create({mnemonic});
-    walletSPV = await wdbSPV.create({mnemonic});
+    walletPlugin = await wdbPlugin.create({id: 'test', mnemonic});
+    walletWalletNode = await wdbNode.create({id: 'test', mnemonic});
+    walletSPV = await wdbSPV.create({id: 'test', mnemonic});
 
     // Everyone has the same account, lookahead, and address chain
     const account = await walletPlugin.getAccount(0);
@@ -140,9 +165,10 @@ describe('Wallet Sync', function() {
     // We derive more addresses than the lookahead to test
     // that during an initial chain scan (like importing from a seed phrase)
     // blocks with too many transactions will be re-scanned
-    // after adding additional keys to the bloom filter.
+    // after adding additional keys to the database and client bloom filter.
     let index = 0;
-    const walletMiner = await wdbPlugin.get('primary');
+    const wdbMiner = miner.require('walletdb').wdb;
+    const walletMiner = await wdbMiner.get('primary');
     for (let b = 0; b < blocks; b++) {
       for (let t = 0; t < txs; t++) {
         const key = account.deriveReceive(index++);
@@ -157,8 +183,8 @@ describe('Wallet Sync', function() {
           }]
         });
       }
-      const block = await nodeWithPlugin.miner.mineBlock();
-      assert(await nodeWithPlugin.chain.add(block));
+      const block = await miner.miner.mineBlock();
+      assert(await miner.chain.add(block));
     }
   });
 
@@ -167,21 +193,30 @@ describe('Wallet Sync', function() {
     await walletNode.close();
     await nodeWithoutWallet.close();
     await nodeWithPlugin.close();
+    await miner.close();
 
     // Restore
     Account.MAX_LOOKAHEAD = currentLookahead;
   });
 
   it('should sync wallet as plugin in full node', async () => {
-    // Because this wallet is running as a plugin, it gets all blocks
-    // unfiltered as they are added to the chain. It should be synced.
-    await forValue(wdbPlugin, 'height', nodeWithPlugin.chain.height);
+    // Connect the full node with its wallet plugin to the miner node.
+    await nodeWithPlugin.connect();
+    await nodeWithPlugin.startSync();
+
+    await forValue(wdbPlugin, 'height', miner.chain.height);
     const balance = await walletPlugin.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
     assert.strictEqual(expected, balance.confirmed);
   });
 
   it('should rescan wallet as plugin in full node', async () => {
+    // Because we've already scanned this wallet once, we need
+    // to remove that wallet and clear the walletDB bloom filter,
+    // otherwise it will "already know" all the keys in advance.
+    await wdbPlugin.remove('test');
+    wdbPlugin.resetFilter();
+
     const rescanPlugin = await wdbPlugin.create({
       id: 'rescanPlugin',
       mnemonic
@@ -191,7 +226,7 @@ describe('Wallet Sync', function() {
     assert.strictEqual(balance.tx, 0);
     assert.strictEqual(balance.confirmed, 0);
     await wdbPlugin.rescan(0);
-    await forValue(wdbPlugin, 'height', nodeWithPlugin.chain.height);
+    await forValue(wdbPlugin, 'height', miner.chain.height);
 
     balance = await rescanPlugin.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
@@ -202,7 +237,7 @@ describe('Wallet Sync', function() {
     // Connect the full node with its remote wallet node to the miner node.
     await nodeWithoutWallet.connect();
     await nodeWithoutWallet.startSync();
-    await forValue(wdbNode, 'height', nodeWithPlugin.chain.height);
+    await forValue(wdbNode, 'height', miner.chain.height);
 
     const balance = await walletWalletNode.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
@@ -213,7 +248,7 @@ describe('Wallet Sync', function() {
     // Connect the SPV node with its wallet plugin to the miner node.
     await spvNode.connect();
     await spvNode.startSync();
-    await forValue(wdbSPV, 'height', nodeWithPlugin.chain.height);
+    await forValue(wdbSPV, 'height', miner.chain.height);
 
     const balance = await walletSPV.getBalance();
     assert.strictEqual(balance.tx, blocks * txs);
