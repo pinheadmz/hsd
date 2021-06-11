@@ -38,8 +38,7 @@ describe('Recoverable bids', function() {
 
     let publicKey = account.accountKey;
     for(let offset = 0; offset < nameHash.length; offset += 4) {
-      let index = nameHash.slice(offset, offset + 4);
-      index = index.readUInt32BE();
+      let index = nameHash.readUInt32BE(offset);
 
       // Must use non-hardened derivation because we only access public key
       index &= 0x7fffffff;
@@ -67,23 +66,21 @@ describe('Recoverable bids', function() {
     return bw.render();
   }
 
-  function valueFromBuffer(buf) {
-    // This is clean because all HNS values are less than 51 bits.
-    return parseInt(buf.readBigUInt64BE());
+  function valueFromBuffer(buffer) {
+    assert(Buffer.isBuffer(buffer));
+    return parseInt(buffer.readBigUInt64BE());
   }
 
   function encodeRecoverableBidAddress(value, key) {
-    const valBuf = valueToBuffer(value);
-    const hash = xorBuffers(valBuf, key);
-    const version = 31;
-    return new Address({version, hash});
+    const buffer = valueToBuffer(value);
+    const hash = xorBuffers(buffer, key);
+    return Address.fromNulldata(hash);
   }
 
   function decodeRecoverableBidAddress(address, key) {
-    const {version, hash} = address;
-    assert(version === 31);
-    assert(hash.length === 8);
-    const valBuf = xorBuffers(hash, key);
+    assert(address.isNulldata());
+    assert(address.hash.length === 8);
+    const valBuf = xorBuffers(address.hash, key);
     return valueFromBuffer(valBuf);
   }
 
@@ -94,8 +91,8 @@ describe('Recoverable bids', function() {
     const bidValue = 10123456; // 10.123456 HNS
 
     const key = await getRecoverableBidKey(nameHash, bidAddress);
-    const recoveryAddress = encodeRecoverableBidAddress(bidValue, key);
-    const recoveredValue = decodeRecoverableBidAddress(recoveryAddress, key);
+    const nulldata = encodeRecoverableBidAddress(bidValue, key);
+    const recoveredValue = decodeRecoverableBidAddress(nulldata, key);
 
     assert.strictEqual(bidValue, recoveredValue);
 
@@ -105,8 +102,8 @@ describe('Recoverable bids', function() {
       bidAddress: bidAddress.toString(network),
       bidValue,
       key,
-      recoveryAddress,
-      recoveryAddressHash: recoveryAddress.hash,
+      nulldata: nulldata.toString(network),
+      nulldataHash: nulldata.hash,
       recoveredValue
     });
   });
