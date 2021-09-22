@@ -9,12 +9,15 @@ const {resolve} = require('path');
 const Chain = require('../lib/blockchain/chain');
 const BlockStore = require('../lib/blockstore/level');
 const Miner = require('../lib/mining/miner');
-const MemWallet = require('./util/memwallet');
 const ownership = require('../lib/covenants/ownership');
 const Address = require('../lib/primitives/address');
+const MTX = require('../lib/primitives/mtx');
+const TX = require('../lib/primitives/tx');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
+const WalletDB = require('../lib/wallet/walletdb');
 const AirdropProof = require('../lib/primitives/airdropproof');
+const {Resource} = require('../lib/dns/resource');
 
 const network = Network.get('regtest');
 
@@ -41,18 +44,13 @@ const miner = new Miner({
 });
 const cpu = miner.cpu;
 
-const wallet = new MemWallet({
-  network
+const wdb = new WalletDB({
+  memory: true,
+  network: network
 });
 
-wallet.getNameStatus = async (nameHash) => {
-  assert(Buffer.isBuffer(nameHash));
-  const height = chainGenerator.height + 1;
-  return chainGenerator.db.getNameStatus(nameHash, height);
-};
-
-chainGenerator.on('connect', (entry, block) => {
-  wallet.addBlock(entry, block.txs);
+chainGenerator.on('connect', async (entry, block) => {
+  await wdb.addBlock(entry, block.txs);
 });
 
 // Keep track of what happens in each block
@@ -63,8 +61,15 @@ async function mineBlock(mtxs, claims, airdrops, label) {
   const job = await cpu.createJob();
 
   if (mtxs) {
-    for (const mtx of mtxs)
-      job.pushTX(mtx.toTX());
+    for (const mtx of mtxs) {
+      if (mtx instanceof MTX) {
+        job.pushTX(mtx.toTX());
+        continue;
+      }
+
+      if (mtx instanceof TX)
+        job.pushTX(mtx);
+    }
   }
 
   if (claims) {
@@ -90,15 +95,21 @@ async function mineBlocks(n, label) {
 }
 
 describe('Checkpoints', function() {
+  let wallet;
+
   before(async () => {
     ownership.ignore = true;
 
     await blocks.open();
     await chainGenerator.open();
     await miner.open();
+    await wdb.open();
+
+    wallet = await wdb.get('primary');
   });
 
   after(async () => {
+    await wdb.close();
     await miner.close();
     await chainGenerator.close();
     await blocks.close();
@@ -108,7 +119,9 @@ describe('Checkpoints', function() {
 
   it('should add addrs to miner', async () => {
     miner.addresses.length = 0;
-    miner.addAddress(wallet.getReceive());
+    const wkey = await wallet.createReceive();
+    miner.addAddress(wkey.getAddress());
+
   });
 
   it('should mine 200 blocks', async () => {
@@ -118,13 +131,12 @@ describe('Checkpoints', function() {
   });
 
   it('should CLAIM and REGISTER a reserved name', async () => {
-    const claim = await wallet.fakeClaim('cloudflare');
+    const claim = await wallet.makeFakeClaim('cloudflare');
 
     await mineBlock(null, [claim], null, 'claim');
     await mineBlocks(network.names.lockupPeriod, 'after claim');
 
-    const register = await wallet.createRegister('cloudflare');
-
+    const register = await wallet.sendUpdate('cloudflare', new Resource());
     await mineBlock([register], null, null, 'register reserved');
   });
 
@@ -136,22 +148,27 @@ describe('Checkpoints', function() {
     });
     const value = 1234567;
 
-    const mtx = await wallet.send({
-      outputs: [{address, value}]
-    });
+    const mtx = new MTX();
+    mtx.addOutput({ address, value });
+
+    // wallet sendMTX and createTX will throw on nulldata address.
+    await wallet.fund(mtx);
+    await wallet.finalize(mtx);
+    await wallet.sign(mtx);
 
     await mineBlock([mtx], null, null, 'nulldata');
   });
 
   it('should send coins to regular address', async () => {
-    const address = wallet.getReceive();
+    const wkey = await wallet.createReceive();
+    const address = wkey.getAddress();
     const value = 23000000;
 
-    const mtx = await wallet.send({
+    const tx = await wallet.send({
       outputs: [{address, value}]
     });
 
-    await mineBlock([mtx], null, null, 'normal address');
+    await mineBlock([tx], null, null, 'normal address');
   });
 
   it('should win names in auction', async () => {
@@ -162,18 +179,18 @@ describe('Checkpoints', function() {
     // Two bids, but wallet will not REGISTER
     const name3 = rules.grindName(5, chainGenerator.height - 5, network);
 
-    const open1 = await wallet.sendOpen(name1);
-    const open2 = await wallet.sendOpen(name2);
-    const open3 = await wallet.sendOpen(name3);
+    const open1 = await wallet.sendOpen(name1, false);
+    const open2 = await wallet.sendOpen(name2, false);
+    const open3 = await wallet.sendOpen(name3, false);
 
     await mineBlock([open1, open2, open3], null, null, 'opens');
     await mineBlocks(network.names.treeInterval + 1, 'after opens');
 
-    const bid1 = await wallet.sendBid(name1, 100, 200);
-    const bid2 = await wallet.sendBid(name2, 100, 200);
-    const bid3 = await wallet.sendBid(name2, 200, 300);
-    const bid4 = await wallet.sendBid(name3, 400, 500);
-    const bid5 = await wallet.sendBid(name3, 600, 700);
+    const bid1 = await wallet.sendBid(name1, 1000, 2000);
+    const bid2 = await wallet.sendBid(name2, 1000, 2000);
+    const bid3 = await wallet.sendBid(name2, 2000, 3000);
+    const bid4 = await wallet.sendBid(name3, 4000, 5000);
+    const bid5 = await wallet.sendBid(name3, 6000, 7000);
 
     await mineBlock([bid1, bid2, bid3, bid4, bid5], null, null, 'bids');
     await mineBlocks(network.names.biddingPeriod, 'after bids');
@@ -185,8 +202,8 @@ describe('Checkpoints', function() {
     await mineBlock([reveal1, reveal2, reveal3], null, null, 'reveals');
     await mineBlocks(network.names.revealPeriod, 'after reveals');
 
-    const register1 = await wallet.sendRegister(name1);
-    const register2 = await wallet.sendRegister(name2);
+    const register1 = await wallet.sendUpdate(name1, new Resource());
+    const register2 = await wallet.sendUpdate(name2, new Resource());
 
     await mineBlock([register1, register2], null, null, 'registers');
     await mineBlocks(10, 'after registers');
